@@ -2,21 +2,40 @@ from constants import pc1_table, pc2_table, shift_positions, ip_table, ip_inv_ta
 
 sub_keys = []
 
+
+def validate_key_input(key):
+    if isinstance(key, str):
+        key = key.encode()  # Convert string to bytes
+    if not isinstance(key, (bytes, bytearray)):
+        raise TypeError("Key must be a bytes-like object or string.")
+    if len(key) != 8:
+        raise ValueError("Key must be exactly 8 bytes (64 bits).")
+    return key
+
+
 def text_to_bin(text):
-    return ''.join(format(ord(c), '08b') for c in text)
+    if isinstance(text, str):
+        text = text.encode()  # Convert string to bytes
+    return ''.join(format(byte, '08b') for byte in text)
+
 
 def bin_to_text(binary_string):
     length = len(binary_string)
-    binary_string = binary_string[:length - (length % 8)]
-    chars = [chr(int(binary_string[i:i + 8], 2)) for i in range(0, len(binary_string), 8)]
-    return ''.join(chars)
+    binary_string = binary_string[:length -
+                                  (length % 8)]  # Trim to multiple of 8
+    chars = [int(binary_string[i:i + 8], 2)
+             for i in range(0, len(binary_string), 8)]
+    return bytes(chars).decode('utf-8', errors='ignore')  # Safely decode
+
 
 def pc1_conversion(binary_key):
     temp_list = [int(x) for x in binary_key]
     return [temp_list[i - 1] for i in pc1_table]
 
+
 def shift_left(bits, shift_value):
     return bits[shift_value:] + bits[:shift_value]
+
 
 def generate_subkeys(left, right):
     for round_count in range(1, 17):
@@ -27,21 +46,27 @@ def generate_subkeys(left, right):
         sub_key = [merged_bits[i - 1] for i in pc2_table]
         sub_keys.append(sub_key)
 
+
 def key_setup(key):
+    key = validate_key_input(key)
     binary_key = text_to_bin(key)
     initial_key = pc1_conversion(binary_key)
     left_bits = initial_key[:28]
     right_bits = initial_key[28:]
     generate_subkeys(left_bits, right_bits)
 
+
 def initial_permutation(bits):
     return [int(bits[i - 1]) for i in ip_table]
+
 
 def expansion_box(right_half):
     return [right_half[i - 1] for i in expansion_table]
 
+
 def xor_with_key(expanded, key_index):
     return [expanded[i] ^ sub_keys[key_index][i] for i in range(len(expanded))]
+
 
 def s_box_substitution(bits):
     result = ''
@@ -54,8 +79,10 @@ def s_box_substitution(bits):
         result += bin_val
     return [int(bit) for bit in result]
 
+
 def permutation(sbox_output):
     return [sbox_output[i - 1] for i in p_table]
+
 
 def des_round(left, right, round_number):
     expanded_right = expansion_box(right)
@@ -65,11 +92,13 @@ def des_round(left, right, round_number):
     new_right = [left[i] ^ p_result[i] for i in range(len(left))]
     return right, new_right
 
+
 def final_permutation(bits):
     return [bits[i - 1] for i in ip_inv_table]
 
-def des_encrypt(plaintext):
-    key_setup('reynaldi')
+
+def des_encrypt(plaintext, key):
+    key_setup(key)
     padded_plaintext = plaintext.ljust((len(plaintext) + 7) // 8 * 8, '\x00')
     ciphertext = ""
 
@@ -87,7 +116,8 @@ def des_encrypt(plaintext):
         right_half = permuted_bits[32:]
 
         for round_number in range(16):
-            left_half, right_half = des_round(left_half, right_half, round_number)
+            left_half, right_half = des_round(
+                left_half, right_half, round_number)
 
         final_bits = right_half + left_half
         final_permuted_bits = final_permutation(final_bits)
@@ -98,8 +128,9 @@ def des_encrypt(plaintext):
 
     return ciphertext
 
-def des_decrypt(ciphertext):
-    key_setup('reynaldi')
+
+def des_decrypt(ciphertext, key):
+    key_setup(key)
     plaintext = ""
 
     for i in range(0, len(ciphertext), 16):
@@ -110,7 +141,8 @@ def des_decrypt(ciphertext):
         right_half = permuted_bits[32:]
 
         for round_number in reversed(range(16)):
-            left_half, right_half = des_round(left_half, right_half, round_number)
+            left_half, right_half = des_round(
+                left_half, right_half, round_number)
 
         final_bits = right_half + left_half
         final_permuted_bits = final_permutation(final_bits)
@@ -120,27 +152,3 @@ def des_decrypt(ciphertext):
         plaintext += block_plaintext
 
     return plaintext.strip('\x00')
-
-def main():
-    key_setup()
-
-    mode = input("Encrypt or Decrypt (e/d)? ").lower()
-    if mode == 'e':
-        plaintext = input("Enter plaintext (max 8 characters): ")
-        if len(plaintext) > 8:
-            print("Plaintext must be at most 8 characters.")
-            exit()
-        ciphertext = des_encrypt(plaintext)
-        print(f"Encrypted ciphertext (hex): {ciphertext}")
-    elif mode == 'd':
-        ciphertext = input("Enter ciphertext (16 hex digits): ")
-        if len(ciphertext) != 16:
-            print("Ciphertext must be exactly 16 hex digits.")
-            exit()
-        plaintext = des_decrypt(ciphertext)
-        print(f"Decrypted plaintext: {plaintext}")
-    else:
-        print("Invalid mode, choose 'e' for encrypt or 'd' for decrypt")
-
-if __name__ == "__main__":
-    main()
